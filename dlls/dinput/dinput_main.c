@@ -120,7 +120,7 @@ static struct list direct_input_list = LIST_INIT( direct_input_list );
  */
 HRESULT WINAPI DirectInputCreateEx(
 	HINSTANCE hinst, DWORD dwVersion, REFIID riid, LPVOID *ppDI,
-	LPUNKNOWN punkOuter) 
+	LPUNKNOWN punkOuter)
 {
     IDirectInputImpl* This;
 
@@ -282,7 +282,7 @@ static HRESULT WINAPI IDirectInputAImpl_EnumDevices(
 	    }
 	}
     }
-    
+
     return 0;
 }
 /******************************************************************************
@@ -290,7 +290,7 @@ static HRESULT WINAPI IDirectInputAImpl_EnumDevices(
  */
 static HRESULT WINAPI IDirectInputWImpl_EnumDevices(
 	LPDIRECTINPUT7W iface, DWORD dwDevType, LPDIENUMDEVICESCALLBACKW lpCallback,
-	LPVOID pvRef, DWORD dwFlags) 
+	LPVOID pvRef, DWORD dwFlags)
 {
     IDirectInputImpl *This = impl_from_IDirectInput7W( iface );
     DIDEVICEINSTANCEW devInstance;
@@ -313,7 +313,7 @@ static HRESULT WINAPI IDirectInputWImpl_EnumDevices(
 	    }
 	}
     }
-    
+
     return 0;
 }
 
@@ -416,7 +416,7 @@ static HRESULT WINAPI IDirectInputWImpl_QueryInterface(LPDIRECTINPUT7W iface, RE
 
 static HRESULT WINAPI IDirectInputAImpl_Initialize(LPDIRECTINPUT7A iface, HINSTANCE hinst, DWORD x) {
 	TRACE("(this=%p,%p,%x)\n",iface, hinst, x);
-	
+
 	/* Initialize can return: DIERR_BETADIRECTINPUTVERSION, DIERR_OLDDIRECTINPUTVERSION and DI_OK.
 	 * Since we already initialized the device, return DI_OK. In the past we returned DIERR_ALREADYINITIALIZED
 	 * which broke applications like Tomb Raider Legend because it isn't a legal return value.
@@ -681,9 +681,49 @@ static HRESULT WINAPI IDirectInput8AImpl_EnumDevicesBySemantics(
 )
 {
     IDirectInputImpl *This = impl_from_IDirectInput8A( iface );
+    DIDEVICEINSTANCEA devInstance;
+    unsigned int i;
+    int j, r;
 
-    FIXME("(this=%p,%s,%p,%p,%p,%04x): stub\n", This, ptszUserName, lpdiActionFormat,
+    TRACE("(this=%p,%s,%p,%p,%p,%04x): stub\n", This, ptszUserName, lpdiActionFormat,
           lpCallback, pvRef, dwFlags);
+
+    /* mimicking what EnumDevices does and calling the callback function */
+    for (i = 0; i < NB_DINPUT_DEVICES; i++) {
+        if (!dinput_devices[i]->enum_deviceA) continue;
+        for (j = 0, r = -1; r != 0; j++) {
+        int numberDevices = 2; /* the mouse and the keyboard */
+
+        devInstance.dwSize = sizeof(devInstance);
+
+        TRACE("  - checking device %u ('%s')\n", i, dinput_devices[i]->name);
+        if ((r = dinput_devices[i]->enum_deviceA(DI8DEVCLASS_ALL, dwFlags, &devInstance, This->dwVersion, j))) {
+            LPDIRECTINPUTDEVICE8A lpdidev;
+            /* additionaly we have to create the device and set the data format */
+            IDirectInput8AImpl_CreateDevice(iface,&devInstance.guidInstance, &lpdidev, NULL);
+            int hasFormat = 0;
+
+            /* only accept keyboard or mouse for now */
+            if ( GET_DIDEVICE_TYPE(devInstance.dwDevType) == DI8DEVTYPE_KEYBOARD ) {
+                IDirectInputDevice2AImpl_SetDataFormat(lpdidev,&c_dfDIKeyboard);
+                hasFormat = 1;
+            }
+
+            if ( GET_DIDEVICE_TYPE(devInstance.dwDevType) == DI8DEVTYPE_MOUSE ) {
+                IDirectInputDevice2AImpl_SetDataFormat(lpdidev,&c_dfDIMouse);
+                hasFormat = 1;
+            }
+
+            if (!hasFormat) continue;
+
+            DWORD lpCallbackFlags = 0;
+            TRACE("Flags don't indicate why the device is enumerated lpCallbackFlags=%d\n",lpCallbackFlags);
+            if  (lpCallback(&devInstance, lpdidev, 0, numberDevices--, pvRef) == DIENUM_STOP)
+	            return 0;
+        }
+	    }
+    }
+
 #define X(x) if (dwFlags & x) FIXME("\tdwFlags |= "#x"\n");
 	X(DIEDBSFL_ATTACHEDONLY)
 	X(DIEDBSFL_THISUSER)
@@ -841,7 +881,7 @@ static HRESULT WINAPI DICF_CreateInstance(
 		return DirectInputCreateEx(0,0,riid,ppobj,pOuter);
 	}
 
-	FIXME("(%p,%p,%s,%p) Interface not found!\n",This,pOuter,debugstr_guid(riid),ppobj);	
+	FIXME("(%p,%p,%s,%p) Interface not found!\n",This,pOuter,debugstr_guid(riid),ppobj);
 	return E_NOINTERFACE;
 }
 
@@ -1121,3 +1161,4 @@ void check_dinput_hooks(LPDIRECTINPUTDEVICE8W iface)
 
     LeaveCriticalSection(&dinput_hook_crit);
 }
+
