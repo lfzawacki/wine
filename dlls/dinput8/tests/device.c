@@ -34,6 +34,11 @@ static BOOL CALLBACK enum_by_semantics(
     DWORD dwRemaining,
     LPVOID pvRef)
 {
+    /* for each device increment the parameter */
+    int *ndevices = pvRef;
+
+    if (ndevices != NULL) *ndevices += 1;
+
     return DIENUM_CONTINUE;
 }
 
@@ -46,6 +51,7 @@ static void test_action_mapping(void)
     DIACTIONFORMAT af;
     /* Dummy GUID */
     const GUID ACTION_MAPPING_GUID = { 0x1, 0x2, 0x3, { 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb } };
+    int ndevices = 0;
 
     DIACTION actionMapping[]=
     {
@@ -90,6 +96,14 @@ static void test_action_mapping(void)
 
     ok(SUCCEEDED(hr), "EnumDevicesBySemantics failed: hr=%08x\n",hr);
 
+    /* This will receive the number of enumerated devices, incremented each
+       time one is enumerated by the callback function
+    */
+    hr = IDirectInput8_EnumDevicesBySemantics(pDI,0, &af,
+        enum_by_semantics, &ndevices, 0);
+
+    todo_wine ok (ndevices > 0, "EnumDevicesBySemantics did not call the callback. hr=%08x ndevices=%d\n", hr, ndevices);
+
     /* The call fails with a zeroed GUID */
     memset(&af.guidActionMap, 0, sizeof(GUID));
     hr = IDirectInput8_EnumDevicesBySemantics(pDI,0, &af,
@@ -107,3 +121,4 @@ START_TEST(device)
 
     CoUninitialize();
 }
+
